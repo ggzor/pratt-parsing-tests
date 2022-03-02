@@ -1,0 +1,4 @@
+ignore-project: False
+executable-dynamic: True
+test-options: "--color"
+test-show-details: streaming
