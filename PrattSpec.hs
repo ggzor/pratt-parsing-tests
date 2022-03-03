@@ -74,12 +74,18 @@ tests =
     , "a ? b : c"
     , Cond (Name "a") (Name "b") (Name "c")
     )
-  ,
-    ( "handles ternary operators without spaces"
-    , "a?b:c"
-    , Cond (Name "a") (Name "b") (Name "c")
-    )
-  ,
+  , {-
+    FIXME: You have to give up ternary without spaces if you want quasi-ambiguous
+    non-prefix operators (Unwrap and Cond), without a non-prefix backtrack.
+    Non-prefix backtracks are really bad for error messages using parser-combinators.
+    Prefix backtracks are fine.
+    ,
+      ( "handles ternary operators without spaces"
+      , "a?b:c"
+      , Cond (Name "a") (Name "b") (Name "c")
+      )
+    -}
+
     ( "handles nested ternary operators"
     , "a ? b ? c : d : e"
     , Cond
@@ -156,6 +162,11 @@ tests =
     ( "handles mixed infix and non-prefix with overlapping"
     , "3 + ++a-- b"
     , Plus (Num 3) (App (PostDecrement (Increment (Name "a"))) (Name "b"))
+    )
+  ,
+    ( "handles space-sensitive operators"
+    , "a? ? b : c"
+    , Cond (Unwrap (Name "a")) (Name "b") (Name "c")
     )
   ]
 

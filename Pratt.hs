@@ -23,6 +23,7 @@ data Expr
   | Exponent Expr Expr
   | Increment Expr
   | PostDecrement Expr
+  | Unwrap Expr
   | Custom String [Expr]
   deriving (Eq, Show)
 
@@ -32,29 +33,22 @@ identifier = (:) <$> C.letterChar <*> many alphaNumChar
 keyword :: String -> Parser ()
 keyword kw = string kw *> notFollowedBy alphaNumChar
 
-data Part
-  = Hole Int
-  | Chunk String
+data SpaceSpec = Optional | Require | Forbid
   deriving (Show, Eq)
 
-customOperators :: [(String, [Part])]
-customOperators =
-  [ -- Prefix
-    ("group", [Chunk "(", Hole 0, Chunk ")"])
-  , ("tuple", [Chunk "(", Hole 0, Chunk ",", Hole 0, Chunk ")"])
-  , ("increment", [Chunk "++", Hole 2000])
-  , ("cond", [Chunk "if", Hole 0, Chunk "then", Hole 0, Chunk "else", Hole 0])
-  , -- Non-prefix
-    ("ternary-cond", [Hole 50, Chunk "?", Hole 0, Chunk ":", Hole 0])
-  , ("plus", [Hole 100, Chunk "+", Hole 100])
-  , ("times", [Hole 200, Chunk "*", Hole 200])
-  , ("exp", [Hole 300, Chunk "^", Hole (300 - 1)])
-  , ("post-decrement", [Hole 2000, Chunk "--"])
-  ]
+data Part
+  = Hole SpaceSpec Int
+  | Chunk SpaceSpec String
+  deriving (Show, Eq)
+
+toSpaceParser :: SpaceSpec -> Parser ()
+toSpaceParser Optional = space
+toSpaceParser Require = space1
+toSpaceParser Forbid = pure ()
 
 isChunk :: Part -> Bool
-isChunk (Chunk _) = True
-isChunk (Hole _) = False
+isChunk (Chunk _ _) = True
+isChunk (Hole _ _) = False
 
 chunkToParser :: [String] -> String -> Parser ()
 chunkToParser chunks s =
@@ -69,30 +63,30 @@ type OperatorsDef = ([PrefixOperatorDef], [InfixOperatorDef])
 
 genParser :: [String] -> (Int -> Parser Expr) -> [Part] -> Parser [Expr]
 genParser chunks _ [] = pure []
-genParser chunks pExpr (Hole prec : rest) =
-  (:) <$> (space *> pExpr prec) <*> genParser chunks pExpr rest
-genParser chunks pExpr (Chunk s : rest) =
-  (space *> chunkToParser chunks s) *> genParser chunks pExpr rest
+genParser chunks pExpr (Hole spaceSpec prec : rest) =
+  (:) <$> (toSpaceParser spaceSpec *> pExpr prec) <*> genParser chunks pExpr rest
+genParser chunks pExpr (Chunk spaceSpec s : rest) =
+  (toSpaceParser spaceSpec *> chunkToParser chunks s) *> genParser chunks pExpr rest
 
 customToDef :: [String] -> [(String, [Part])] -> OperatorsDef
 customToDef chunks [] = ([], [])
-customToDef chunks ((name, parts@(Chunk _ : _)) : rest) =
+customToDef chunks ((name, parts@(Chunk _ _ : _)) : rest) =
   let (prefixOps, infixOps) = customToDef chunks rest
       parser = \pExpr -> Custom name <$> genParser chunks pExpr parts
    in (parser : prefixOps, infixOps)
-customToDef chunks ((name, Hole prec : Chunk pref : parts) : rest) =
+customToDef chunks ((name, Hole _ prec : Chunk spaceSpec pref : parts) : rest) =
   let (prefixOps, infixOps) = customToDef chunks rest
       parser =
         ( prec
-        , space *> void (chunkToParser chunks pref)
+        , toSpaceParser spaceSpec *> void (chunkToParser chunks pref)
         , \left pExpr -> Custom name <$> ((left :) <$> genParser chunks pExpr parts)
         )
    in (prefixOps, parser : infixOps)
 
 compileOperators :: [(String, [Part])] -> Int -> OperatorsDef
 compileOperators ops appPrec =
-  let follow = [s | (_, parts) <- ops, Chunk s <- drop 1 . filter isChunk $ parts]
-      allChunks = [s | (_, parts) <- ops, Chunk s <- filter isChunk parts]
+  let follow = [s | (_, parts) <- ops, Chunk _ s <- drop 1 . filter isChunk $ parts]
+      allChunks = [s | (_, parts) <- ops, Chunk _ s <- filter isChunk parts]
       avoid = map parseFollow . L.nub $ follow
       parseFollow s | C.isAlpha (last s) = keyword s
       parseFollow s = void $ string s
@@ -130,6 +124,31 @@ pLoop ops@(_, infixOps) rbp left = do
         else pure left
     Nothing -> pure left
 
+fChunk = Chunk Forbid
+fHole = Hole Forbid
+
+oChunk = Chunk Optional
+oHole = Hole Optional
+
+rChunk = Chunk Require
+rHole = Hole Require
+
+customOperators :: [(String, [Part])]
+customOperators =
+  [ -- Prefix
+    ("group", [oChunk "(", oHole 0, oChunk ")"])
+  , ("tuple", [oChunk "(", oHole 0, oChunk ",", oHole 0, oChunk ")"])
+  , ("increment", [oChunk "++", fHole 2000])
+  , ("cond", [oChunk "if", oHole 0, oChunk "then", oHole 0, oChunk "else", oHole 0])
+  , -- Non-prefix
+    ("unwrap", [fHole 2000, fChunk "?"])
+  , ("ternary-cond", [fHole 50, oChunk "?", oHole 0, oChunk ":", oHole 0])
+  , ("plus", [fHole 100, oChunk "+", oHole 100])
+  , ("times", [fHole 200, oChunk "*", oHole 200])
+  , ("exp", [fHole 300, oChunk "^", oHole (300 - 1)])
+  , ("post-decrement", [fHole 2000, fChunk "--"])
+  ]
+
 traverseCustom :: (String -> [Expr] -> Expr) -> Expr -> Expr
 traverseCustom t e =
   case e of
@@ -153,6 +172,7 @@ unCustom name exprs =
           "times" -> binary Times
           "exp" -> binary Exponent
           "post-decrement" -> unary PostDecrement
+          "unwrap" -> unary Unwrap
       unary f [e1] = f e1
       binary f [e1, e2] = f e1 e2
       ternary f [e1, e2, e3] = f e1 e2 e3
