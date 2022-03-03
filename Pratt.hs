@@ -21,6 +21,7 @@ data Expr
   | Cond Expr Expr Expr
   | Exponent Expr Expr
   | Increment Expr
+  | PostDecrement Expr
   | Custom String [Expr]
   deriving (Eq, Show)
 
@@ -47,6 +48,7 @@ customOperators =
   , ("plus", [Hole 100, Chunk "+", Hole 100])
   , ("times", [Hole 200, Chunk "*", Hole 200])
   , ("exp", [Hole 300, Chunk "^", Hole (300 - 1)])
+  , ("post-decrement", [Hole 2000, Chunk "--"])
   ]
 
 isChunk :: Part -> Bool
@@ -139,13 +141,14 @@ unCustom name exprs =
         case name of
           "group" -> head
           "tuple" -> binary Tuple
-          "increment" -> prefix Increment
+          "increment" -> unary Increment
           "cond" -> ternary Cond
           "ternary-cond" -> ternary Cond
           "plus" -> binary Plus
           "times" -> binary Times
           "exp" -> binary Exponent
-      prefix f [e1] = f e1
+          "post-decrement" -> unary PostDecrement
+      unary f [e1] = f e1
       binary f [e1, e2] = f e1 e2
       ternary f [e1, e2, e3] = f e1 e2 e3
    in op exprs

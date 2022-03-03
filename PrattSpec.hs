@@ -134,6 +134,19 @@ tests =
     , " ( 3 , 4 ) "
     , Tuple (Num 3) (Num 4)
     )
+  ,
+    ( "handles postfix operators"
+    , "3--"
+    , PostDecrement (Num 3)
+    )
+  ,
+    ( "handles complex expressions with postfix operators"
+    , "a ? b + c 3-- : d"
+    , Cond
+        (Name "a")
+        (Plus (Name "b") (App (Name "c") (PostDecrement (Num 3))))
+        (Name "d")
+    )
   ]
 
 main = hspec $ do
