@@ -142,7 +142,7 @@ customOperators =
   , ("cond", [oChunk "if", oHole 0, oChunk "then", oHole 0, oChunk "else", oHole 0])
   , -- Non-prefix
     ("unwrap", [fHole 2000, fChunk "?"])
-  , ("ternary-cond", [fHole 50, oChunk "?", oHole 0, oChunk ":", oHole 0])
+  , ("ternary-cond", [fHole 50, rChunk "?", oHole 0, oChunk ":", oHole 0])
   , ("plus", [fHole 100, oChunk "+", oHole 100])
   , ("times", [fHole 200, oChunk "*", oHole 200])
   , ("exp", [fHole 300, oChunk "^", oHole (300 - 1)])
