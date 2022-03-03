@@ -3,6 +3,7 @@ module Pratt where
 import Control.Monad (void)
 import qualified Data.Char as C
 import qualified Data.List as L
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Void
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Megaparsec
@@ -55,39 +56,43 @@ isChunk :: Part -> Bool
 isChunk (Chunk _) = True
 isChunk (Hole _) = False
 
-chunkToParser :: String -> Parser ()
-chunkToParser s | C.isAlpha (last s) = keyword s
-chunkToParser s = void $ string s
+chunkToParser :: [String] -> String -> Parser ()
+chunkToParser chunks s =
+  let avoid = map (chunkToParser []) . mapMaybe (L.stripPrefix s) . filter (/= s) $ chunks
+   in if C.isAlpha (last s)
+        then keyword s <* notFollowedBy (choice avoid)
+        else void $ string s <* notFollowedBy (choice avoid)
 
 type PrefixOperatorDef = (Int -> Parser Expr) -> Parser Expr
 type InfixOperatorDef = (Int, Parser (), Expr -> (Int -> Parser Expr) -> Parser Expr)
 type OperatorsDef = ([PrefixOperatorDef], [InfixOperatorDef])
 
-genParser :: (Int -> Parser Expr) -> [Part] -> Parser [Expr]
-genParser _ [] = pure []
-genParser pExpr (Hole prec : rest) =
-  (:) <$> (space *> pExpr prec) <*> genParser pExpr rest
-genParser pExpr (Chunk s : rest) =
-  (space *> chunkToParser s) *> genParser pExpr rest
+genParser :: [String] -> (Int -> Parser Expr) -> [Part] -> Parser [Expr]
+genParser chunks _ [] = pure []
+genParser chunks pExpr (Hole prec : rest) =
+  (:) <$> (space *> pExpr prec) <*> genParser chunks pExpr rest
+genParser chunks pExpr (Chunk s : rest) =
+  (space *> chunkToParser chunks s) *> genParser chunks pExpr rest
 
-customToDef :: [(String, [Part])] -> OperatorsDef
-customToDef [] = ([], [])
-customToDef ((name, parts@(Chunk _ : _)) : rest) =
-  let (prefixOps, infixOps) = customToDef rest
-      parser = \pExpr -> Custom name <$> genParser pExpr parts
+customToDef :: [String] -> [(String, [Part])] -> OperatorsDef
+customToDef chunks [] = ([], [])
+customToDef chunks ((name, parts@(Chunk _ : _)) : rest) =
+  let (prefixOps, infixOps) = customToDef chunks rest
+      parser = \pExpr -> Custom name <$> genParser chunks pExpr parts
    in (parser : prefixOps, infixOps)
-customToDef ((name, Hole prec : Chunk pref : parts) : rest) =
-  let (prefixOps, infixOps) = customToDef rest
+customToDef chunks ((name, Hole prec : Chunk pref : parts) : rest) =
+  let (prefixOps, infixOps) = customToDef chunks rest
       parser =
         ( prec
-        , space *> void (chunkToParser pref)
-        , \left pExpr -> Custom name <$> ((left :) <$> genParser pExpr parts)
+        , space *> void (chunkToParser chunks pref)
+        , \left pExpr -> Custom name <$> ((left :) <$> genParser chunks pExpr parts)
         )
    in (prefixOps, parser : infixOps)
 
 compileOperators :: [(String, [Part])] -> Int -> OperatorsDef
 compileOperators ops appPrec =
   let follow = [s | (_, parts) <- ops, Chunk s <- drop 1 . filter isChunk $ parts]
+      allChunks = [s | (_, parts) <- ops, Chunk s <- filter isChunk parts]
       avoid = map parseFollow . L.nub $ follow
       parseFollow s | C.isAlpha (last s) = keyword s
       parseFollow s = void $ string s
@@ -96,7 +101,7 @@ compileOperators ops appPrec =
         , space1 *> notFollowedBy (choice (avoid ++ [eof]))
         , \left pExpr -> App left <$> pExpr appPrec
         )
-      (prefixOps, infixOps) = customToDef ops
+      (prefixOps, infixOps) = customToDef allChunks ops
    in ( prefixOps
           ++ [ const (Num <$> L.decimal)
              , const (Name <$> identifier)

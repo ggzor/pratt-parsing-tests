@@ -147,6 +147,11 @@ tests =
         (Plus (Name "b") (App (Name "c") (PostDecrement (Num 3))))
         (Name "d")
     )
+  ,
+    ( "handles partially-ambiguous prefix operators mixed with non-prefix operators"
+    , "3 ++a"
+    , App (Num 3) (Increment (Name "a"))
+    )
   ]
 
 main = hspec $ do
