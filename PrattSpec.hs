@@ -125,7 +125,7 @@ tests =
         (Name "e")
     )
   ,
-    ( "handles ambiguous operators"
+    ( "handles ambiguous prefix operators"
     , "(3, 4)"
     , Tuple (Num 3) (Num 4)
     )
