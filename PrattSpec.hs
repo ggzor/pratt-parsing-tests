@@ -140,4 +140,4 @@ main = hspec $ do
   describe "pExpression" $ do
     forM_ tests $ \(title, input, expected) ->
       it title $ do
-        parse (pExpression 0) "<test>" input `shouldParse` expected
+        parse pExpr "<test>" input `shouldParse` expected
