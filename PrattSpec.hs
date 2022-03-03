@@ -168,6 +168,22 @@ tests =
     , "a? ? b : c"
     , Cond (Unwrap (Name "a")) (Name "b") (Name "c")
     )
+  ,
+    ( "handles custom index operator"
+    , "a[0]"
+    , Custom "index" [Name "a", Num 0]
+    )
+  ,
+    ( "handles custom index operator within other expressions"
+    , "2 + a[2*k]-- ? b : c"
+    , Cond
+        ( Plus
+            (Num 2)
+            (PostDecrement (Custom "index" [Name "a", Times (Num 2) (Name "k")]))
+        )
+        (Name "b")
+        (Name "c")
+    )
   ]
 
 syntaxRuleTests =

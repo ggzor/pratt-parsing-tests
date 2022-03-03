@@ -177,6 +177,7 @@ customOperatorsStr =
 @times          _:200 * _:200
 @exp            _:300 ^ _:299
 @post-decrement _:2000--
+@index          _:3000[ _:0 ]
 |]
 
 traverseCustom :: (String -> [Expr] -> Expr) -> Expr -> Expr
@@ -203,6 +204,7 @@ unCustom name exprs =
           "exp" -> binary Exponent
           "post-decrement" -> unary PostDecrement
           "unwrap" -> unary Unwrap
+          other -> Custom other
       unary f [e1] = f e1
       binary f [e1, e2] = f e1 e2
       ternary f [e1, e2, e3] = f e1 e2 e3
