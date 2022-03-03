@@ -12,6 +12,7 @@ type Parser a = Parsec Void String a
 data Expr
   = Num Int
   | Name String
+  | Tuple Expr Expr
   | Plus Expr Expr
   | Times Expr Expr
   | App Expr Expr
@@ -31,6 +32,14 @@ prefixOperators =
   [ \pExpr ->
       (space *> char '(' *> space)
         *> pExpr 0
+        <* (space *> char ')')
+  , \pExpr ->
+      (space *> char '(' *> space)
+        *> ( Tuple <$> pExpr 0
+              <*> ( (space *> char ',')
+                      *> (space *> pExpr 0)
+                  )
+           )
         <* (space *> char ')')
   , \pExpr -> (space *> string "++") *> (Increment <$> pExpr 2000)
   , \pExpr ->
@@ -73,6 +82,7 @@ infixOperators =
           ( choice
               [ void $ char ':'
               , void $ char ')'
+              , void $ char ','
               , keyword "then"
               , keyword "else"
               , eof
@@ -84,7 +94,7 @@ infixOperators =
 
 pExpression :: Int -> Parser Expr
 pExpression rbp = do
-  left <- choice $ map ($ pExpression) prefixOperators
+  left <- choice $ map (try . ($ pExpression)) prefixOperators
   pLoop rbp left
 
 pLoop :: Int -> Expr -> Parser Expr

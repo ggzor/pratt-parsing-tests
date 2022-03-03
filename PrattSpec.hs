@@ -124,6 +124,16 @@ tests =
         (Cond (Name "b") (Name "c") (Name "d"))
         (Name "e")
     )
+  ,
+    ( "handles ambiguous operators"
+    , "(3, 4)"
+    , Tuple (Num 3) (Num 4)
+    )
+  ,
+    ( "handles tuple with whitespace"
+    , " ( 3 , 4 ) "
+    , Tuple (Num 3) (Num 4)
+    )
   ]
 
 main = hspec $ do
