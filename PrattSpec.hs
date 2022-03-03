@@ -125,7 +125,7 @@ tests =
         (Name "e")
     )
   ,
-    ( "handles ambiguous operators"
+    ( "handles ambiguous prefixes"
     , "(3, 4)"
     , Tuple (Num 3) (Num 4)
     )
@@ -133,6 +133,11 @@ tests =
     ( "handles tuple with whitespace"
     , " ( 3 , 4 ) "
     , Tuple (Num 3) (Num 4)
+    )
+  ,
+    ( "handles quasi-ambiguous non-prefixes"
+    , "a?"
+    , Unwrap (Name "a")
     )
   ]
 

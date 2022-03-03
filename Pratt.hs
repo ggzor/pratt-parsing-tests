@@ -19,6 +19,7 @@ data Expr
   | Cond Expr Expr Expr
   | Exponent Expr Expr
   | Increment Expr
+  | Unwrap Expr
   deriving (Eq, Show)
 
 identifier :: Parser String
@@ -90,12 +91,26 @@ infixOperators =
           )
     , \left pExpr -> App left <$> pExpr 1000
     )
+  ,
+    ( 1100
+    , void (char '?')
+    , \left _ -> pure $ Unwrap left
+    )
   ]
 
 pExpression :: Int -> Parser Expr
 pExpression rbp = do
   left <- choice $ map (try . ($ pExpression)) prefixOperators
-  pLoop rbp left
+  pLoop' rbp left
+
+pLoop' :: Int -> Expr -> Parser Expr
+pLoop' rbp left = do
+  alt <- optional . choice $
+    flip map (filter (\(lbp, _, _) -> rbp < lbp) infixOperators) $
+      \(lbp, consume, parse) -> try $ do
+        consume
+        parse left pExpression
+  maybe (pure left) (pLoop' rbp) alt
 
 pLoop :: Int -> Expr -> Parser Expr
 pLoop rbp left = do
