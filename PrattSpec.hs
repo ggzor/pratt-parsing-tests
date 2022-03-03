@@ -152,6 +152,11 @@ tests =
     , "3 ++a"
     , App (Num 3) (Increment (Name "a"))
     )
+  ,
+    ( "handles mixed infix and non-prefix with overlapping"
+    , "3 + ++a-- b"
+    , Plus (Num 3) (App (PostDecrement (Increment (Name "a"))) (Name "b"))
+    )
   ]
 
 main = hspec $ do
