@@ -12,5 +12,6 @@ test-suite pratt
     , hspec >=2.8 && <3
     , hspec-megaparsec >=2.2 && <3
     , megaparsec >=9 && <10
+    , raw-strings-qq >=1.1 && <2
   type: exitcode-stdio-1.0
   other-modules: Pratt

@@ -170,8 +170,38 @@ tests =
     )
   ]
 
+syntaxRuleTests =
+  [
+    ( "parses simple prefix rule"
+    , "@increment ++_:2000"
+    , ("increment", [Chunk Optional "++", Hole Forbid 2000])
+    )
+  ,
+    ( "parses grouping rule"
+    , "@group ( _:0 )"
+    , ("group", [Chunk Optional "(", Hole Optional 0, Chunk Optional ")"])
+    )
+  ,
+    ( "parses simple infix rule"
+    , "@plus _:100 + _:100"
+    , ("plus", [Hole Forbid 100, Chunk Optional "+", Hole Optional 100])
+    )
+  ,
+    ( "parses simple postfix rule"
+    , "@post-decrement _:200--"
+    , ("post-decrement", [Hole Forbid 200, Chunk Forbid "--"])
+    )
+  ]
+
 main = hspec $ do
   describe "pExpression" $ do
     forM_ tests $ \(title, input, expected) ->
       it title $ do
         parse pExpr "<test>" input `shouldParse` expected
+  describe "pSyntaxRule" $ do
+    forM_ syntaxRuleTests $ \(title, input, expected) ->
+      it title $ do
+        parse pSyntaxRule "<test>" input `shouldParse` expected
+  describe "customOperators" $ do
+    it "are parseable" $ do
+      parse pAllSyntaxRules "<test>" `shouldSucceedOn` customOperatorsStr

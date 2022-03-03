@@ -1,7 +1,10 @@
+{-# LANGUAGE QuasiQuotes #-}
+
 module Pratt where
 
 import Control.Monad (void)
 import qualified Data.Char as C
+import Data.Functor (($>))
 import qualified Data.List as L
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Void
@@ -9,6 +12,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Text.Megaparsec
 import Text.Megaparsec.Char as C
 import qualified Text.Megaparsec.Char.Lexer as L
+import Text.RawString.QQ (r)
 
 type Parser a = Parsec Void String a
 
@@ -124,30 +128,56 @@ pLoop ops@(_, infixOps) rbp left = do
         else pure left
     Nothing -> pure left
 
-fChunk = Chunk Forbid
-fHole = Hole Forbid
+pSpaceSpec :: Parser SpaceSpec
+pSpaceSpec =
+  choice
+    [ string "\" \"" $> Require
+    , hspace1 $> Optional
+    , pure Forbid
+    ]
 
-oChunk = Chunk Optional
-oHole = Hole Optional
+-- If you want a prefix with Required space,
+-- Then, what you really need a postfix
+pFirstPart :: Parser Part
+pFirstPart = (($ Forbid) <$> pHole) <|> (($ Optional) <$> pChunk)
 
-rChunk = Chunk Require
-rHole = Hole Require
+pPart :: Parser Part
+pPart = try $ do
+  sp <- pSpaceSpec
+  ($ sp) <$> (pHole <|> pChunk)
 
-customOperators :: [(String, [Part])]
-customOperators =
-  [ -- Prefix
-    ("group", [oChunk "(", oHole 0, oChunk ")"])
-  , ("tuple", [oChunk "(", oHole 0, oChunk ",", oHole 0, oChunk ")"])
-  , ("increment", [oChunk "++", fHole 2000])
-  , ("cond", [oChunk "if", oHole 0, oChunk "then", oHole 0, oChunk "else", oHole 0])
-  , -- Non-prefix
-    ("unwrap", [fHole 2000, fChunk "?"])
-  , ("ternary-cond", [fHole 50, rChunk "?", oHole 0, oChunk ":", oHole 0])
-  , ("plus", [fHole 100, oChunk "+", oHole 100])
-  , ("times", [fHole 200, oChunk "*", oHole 200])
-  , ("exp", [fHole 300, oChunk "^", oHole (300 - 1)])
-  , ("post-decrement", [fHole 2000, fChunk "--"])
-  ]
+pHole, pChunk :: Parser (SpaceSpec -> Part)
+pHole = string "_:" *> (flip Hole <$> L.decimal)
+pChunk = flip Chunk <$> some (satisfy (not . (\c -> C.isSpace c || c == '_')))
+
+pSyntaxRule :: Parser (String, [Part])
+pSyntaxRule =
+  (,)
+    <$> (char '@' *> many (satisfy (not . C.isSpace)))
+    <*> (hspace1 *> ((:) <$> pFirstPart <*> some pPart))
+
+pAllSyntaxRules :: Parser [(String, [Part])]
+pAllSyntaxRules = do
+  space
+  rules <- pSyntaxRule `sepEndBy` space1
+  space
+  pure rules
+
+customOperatorsStr :: String
+customOperatorsStr =
+  [r|
+@group          ( _:0 )
+@tuple          ( _:0 , _:0 )
+@increment      ++_:2000
+@cond           if _:0 then _:0 else _:0
+
+@unwrap         _:2000?
+@ternary-cond   _:50" "? _:0 : _:0
+@plus           _:100 + _:100
+@times          _:200 * _:200
+@exp            _:300 ^ _:299
+@post-decrement _:2000--
+|]
 
 traverseCustom :: (String -> [Expr] -> Expr) -> Expr -> Expr
 traverseCustom t e =
@@ -179,6 +209,6 @@ unCustom name exprs =
    in op exprs
 
 pExpr :: Parser Expr
-pExpr =
-  traverseCustom unCustom
-    <$> pExpression (compileOperators customOperators 1000) 0
+pExpr = do
+  let (Right newOperators) = parse pAllSyntaxRules "<custom>" customOperatorsStr
+  traverseCustom unCustom <$> pExpression (compileOperators newOperators 1000) 0
